@@ -11,7 +11,14 @@ import java.util.Map;
 import java.util.HashMap;
 
 import java.lang.Exception;
+import java.lang.reflect.Method;
 import java.io.File;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+
+import android.content.Context;
+import dalvik.system.DexClassLoader;
 
 import com.scottyab.rootbeer.RootBeer;
 
@@ -29,6 +36,7 @@ public class IRoot extends CordovaPlugin {
     private final String LOG_TAG = "IRoot";
 
     private final boolean WITH = true;
+    private Context context;
 
     private enum Action {
         // Actions
@@ -150,8 +158,33 @@ public class IRoot extends CordovaPlugin {
         }
     }
 
+    /**
+   * Get the current Xposed version installed on the device.
+   *
+   * @param context
+   *     The application context
+   * @return The Xposed version or {@code null} if Xposed isn't installed.
+   */
+  public static boolean getXposedVersion(Context context) {
+    try {
+      File xposedBridge = new File("/system/framework/XposedBridge.jar");
+      if (xposedBridge.exists()) {
+        File optimizedDir = context.getDir("dex", Context.MODE_PRIVATE);
+        DexClassLoader dexClassLoader = new DexClassLoader(xposedBridge.getPath(),
+            optimizedDir.getPath(), null, ClassLoader.getSystemClassLoader());
+        Class<?> XposedBridge = dexClassLoader.loadClass("de.robv.android.xposed.XposedBridge");
+        Method getXposedVersion = XposedBridge.getDeclaredMethod("getXposedVersion");
+        if (!getXposedVersion.isAccessible()) getXposedVersion.setAccessible(true);
+        return (boolean) getXposedVersion.invoke(null);
+      }
+    } catch (Exception ignored) {
+    }
+    return false;
+  }
+
     private boolean isDeviceRooted() {
-        return checkBuildTags() || checkSuperUserApk() || checkFilePath();
+     this.context = context;
+        return checkBuildTags() || checkRootMethod3() || checkFilePath() || getXposedVersion(context);
     }
 
     private boolean checkBuildTags() {
@@ -159,21 +192,13 @@ public class IRoot extends CordovaPlugin {
         return buildTags != null && buildTags.contains("test-keys");
     }
 
-    private boolean checkSuperUserApk() {
+    /*private boolean checkSuperUserApk() {
         return new File("/system/app/Superuser.apk").exists();
-    }
+    }*/
 
     private boolean checkFilePath() {
-        String[] paths = {
-                        "/sbin/su",
-                        "/system/bin/su",
-                        "/system/xbin/su",
-                        "/data/local/xbin/su",
-                        "/data/local/bin/su",
-                        "/system/sd/xbin/su",
-                        "/system/bin/failsafe/su",
-                        "/data/local/su"
-        };
+        String[] paths = { "/system/app/Superuser.apk", "/system/app/SuperSU.apk", "/sbin/su", "/system/bin/su", "/system/xbin/su", "/data/local/xbin/su", "/data/local/bin/su", "/system/sd/xbin/su",
+                "/system/bin/failsafe/su", "/data/local/su", "/su/bin/su"};
 
         for (String path : paths) {
             if (new File(path).exists()) {
@@ -183,21 +208,6 @@ public class IRoot extends CordovaPlugin {
 
         return false;
     }
-    
-     private static boolean checkRootMethod1() {
-        String buildTags = android.os.Build.TAGS;
-        return buildTags != null && buildTags.contains("test-keys");
-    }
-
-    private static boolean checkRootMethod2() {
-        String[] paths = { "/system/app/Superuser.apk", "/system/app/SuperSU.apk", "/sbin/su", "/system/bin/su", "/system/xbin/su", "/data/local/xbin/su", "/data/local/bin/su", "/system/sd/xbin/su",
-                "/system/bin/failsafe/su", "/data/local/su", "/su/bin/su"};
-        for (String path : paths) {
-            if (new File(path).exists()) return true;
-        }
-        return false;
-    }
-
     private static boolean checkRootMethod3() {
         Process process = null;
         try {
